@@ -7,7 +7,7 @@
 
   <Import Project="$(VSToolsPath)\DotNet\Microsoft.DotNet.Props" Condition="'$(VSToolsPath)' != ''" />
   <PropertyGroup Label="Globals">
-    <ProjectGuid>3b118a41-3ee2-4d6c-8fac-3bcfdd1bb866</ProjectGuid>
+    <ProjectGuid>760ecb8f-da2e-4125-b69e-ec8576509000</ProjectGuid>
     <RootNamespace>ManageTrafficManager</RootNamespace>
     <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)'=='' ">.\obj</BaseIntermediateOutputPath>
     <OutputPath Condition="'$(OutputPath)'=='' ">.\bin\</OutputPath>
