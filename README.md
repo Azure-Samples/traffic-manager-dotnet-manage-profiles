@@ -4,7 +4,7 @@ platforms: .Net
 author: anuchandy
 ---
 
-#Getting Started with Traffic - Manage Traffic Manager - in .Net #
+# Getting Started with Traffic - Manage Traffic Manager - in .Net #
 
           Azure traffic manager sample for managing profiles.
            - Create a domain

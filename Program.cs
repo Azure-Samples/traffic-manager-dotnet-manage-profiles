@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using Microsoft.Azure.Management.AppService.Fluent;
@@ -103,7 +103,7 @@ namespace ManageTrafficManager
                             .WithRegion(region)
                             .WithExistingResourceGroup(rgName)
                             .WithPricingTier(PricingTier.BasicB1)
-                            .WithOperatingSystem(OperatingSystem.Windows)
+                            .WithOperatingSystem(Microsoft.Azure.Management.AppService.Fluent.OperatingSystem.Windows)
                             .Create();
                     Utilities.Log("Created app service plan " + planName);
                     Utilities.Print(appServicePlan);
