@@ -1,0 +1,4 @@
+C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\bin\Debug\net452\ManageTrafficManager.runtimeconfig.json
+C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\bin\Debug\net452\ManageTrafficManager.runtimeconfig.dev.json
+C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\obj\Debug\net452\ManageTrafficManager.csproj.ManageTrafficManager.exe.config
+C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\obj\Debug\net452\ManageTrafficManager.csproj.CoreCompileInputs.cache
