@@ -1,2 +1,0 @@
-C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\bin\Debug\netstandard1.6\ManageTrafficManager.deps.json
-C:\Sources\dotnet-samples\traffic-manager-dotnet-manage-profiles\obj\Debug\netstandard1.6\ManageTrafficManager.csproj.CoreCompileInputs.cache
