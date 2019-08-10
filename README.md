@@ -1,4 +1,7 @@
 ---
+page_type: sample
+languages: java
+products: azure
 services: Traffic-Manager
 platforms: dotnet
 author: yaohaizh
