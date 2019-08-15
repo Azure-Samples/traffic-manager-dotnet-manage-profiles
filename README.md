@@ -4,25 +4,25 @@ languages:
 - csharp
 products:
 - azure
-services: Traffic-Manager
-platforms: dotnet
-author: yaohaizh
+extensions:
+- services: Traffic-Manager
+- platforms: dotnet
 ---
 
 # Getting started on managing Traffic Manager Profiles in C# #
 
-          Azure traffic manager sample for managing profiles.
-           - Create a domain
-           - Create a self-signed certificate for the domain
-           - Create 5 app service plans in 5 different regions
-           - Create 5 web apps under the each plan, bound to the domain and the certificate
-           - Create a traffic manager in front of the web apps
-           - Disable an endpoint
-           - Delete an endpoint
-           - Enable an endpoint
-           - Change/configure traffic manager routing method
-           - Disable traffic manager profile
-           - Enable traffic manager profile
+ Azure traffic manager sample for managing profiles.
+  - Create a domain
+  - Create a self-signed certificate for the domain
+  - Create 5 app service plans in 5 different regions
+  - Create 5 web apps under the each plan, bound to the domain and the certificate
+  - Create a traffic manager in front of the web apps
+  - Disable an endpoint
+  - Delete an endpoint
+  - Enable an endpoint
+  - Change/configure traffic manager routing method
+  - Disable traffic manager profile
+  - Enable traffic manager profile
 
 
 ## Running this Sample ##
