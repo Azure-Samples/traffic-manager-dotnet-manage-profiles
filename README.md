@@ -5,8 +5,8 @@ languages:
 products:
 - azure
 extensions:
-- services: Traffic-Manager
-- platforms: dotnet
+  services: Traffic-Manager
+  platforms: dotnet
 ---
 
 # Getting started on managing Traffic Manager Profiles in C# #
