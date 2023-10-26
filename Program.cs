@@ -1,26 +1,30 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using Microsoft.Azure.Management.AppService.Fluent;
-using Microsoft.Azure.Management.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
-using Microsoft.Azure.Management.ResourceManager.Fluent.Core.ResourceActions;
-using Microsoft.Azure.Management.Samples.Common;
-using Microsoft.Azure.Management.TrafficManager.Fluent;
-using Microsoft.Azure.Management.TrafficManager.Fluent.TrafficManagerProfile.Definition;
-using Microsoft.Rest.Azure;
+using Azure;
+using Azure.Core;
+using Azure.Identity;
+using Azure.ResourceManager.Samples.Common;
+using Azure.ResourceManager;
+using Azure.ResourceManager.Resources;
+using Azure.ResourceManager.Models;
+using Azure.ResourceManager.TrafficManager;
+using Azure.ResourceManager.TrafficManager.Models;
+using Azure.ResourceManager.AppService;
+using Azure.ResourceManager.AppService.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using Azure.ResourceManager.Network;
 
 namespace ManageTrafficManager
 {
     public class Program
     {
-        private static readonly string certPassword             = Utilities.CreatePassword();
-        private static readonly List<Region> regions            = new List<Region>();
+        private static ResourceIdentifier? _resourceGroupId = null;
+        private static readonly string certPassword = Utilities.CreatePassword();
+        private static readonly List<AzureLocation> regions = new List<AzureLocation>();
 
         /**
          * Azure traffic manager sample for managing profiles.
@@ -36,51 +40,61 @@ namespace ManageTrafficManager
          *  - Disable traffic manager profile
          *  - Enable traffic manager profile
          */
-        public static void RunSample(IAzure azure)
+        public static async Task RunSample(ArmClient client)
         {
-            string rgName = SdkContext.RandomResourceName("rgNEMV_", 24);
-            string domainName = SdkContext.RandomResourceName("jsdkdemo-", 20) + ".com";
-            string appServicePlanNamePrefix = SdkContext.RandomResourceName("jplan1_", 15);
-            string webAppNamePrefix = SdkContext.RandomResourceName("webapp1-", 20) + "-";
-            string tmName = SdkContext.RandomResourceName("jsdktm-", 20);
-            
+            var rgName = Utilities.CreateRandomName("rgNEMV_");
+            var domainName = Utilities.CreateRandomName("jsdkdemo-") + ".com";
+            var appServicePlanNamePrefix = Utilities.CreateRandomName("jplan1_");
+            var webAppNamePrefix = Utilities.CreateRandomName("webapp1-") + "-";
+            var tmName = Utilities.CreateRandomName("jsdktm-");
+            var email = "jondoe@contoso.com";
+            var firstName = "Jon";
+            var lastName = "Doe";
+            var phoneNumber = "4258828080";
+            var country = "US";
+            var city = "Redmond";
+            var address1 = "123 4th Ave";
+            var postalCode = "98052";
+            var state = "WA";
+
+
             // The regions in which web app needs to be created
             //
-            regions.Add(Region.USWest2);
-            regions.Add(Region.USEast2);
-            regions.Add(Region.AsiaEast);
-            regions.Add(Region.IndiaWest);
-            regions.Add(Region.USCentral);
+            regions.Add(AzureLocation.WestUS2);
+            regions.Add(AzureLocation.EastUS2);
+            regions.Add(AzureLocation.EastAsia);
+            regions.Add(AzureLocation.WestIndia);
+            regions.Add(AzureLocation.CentralUS);
             
             try
             {
-                azure.ResourceGroups.Define(rgName)
-                    .WithRegion(Region.USWest)
-                    .Create();
+                //Get default subscription
+                SubscriptionResource subscription = await client.GetDefaultSubscriptionAsync();
+
+                //Create a resource group in the EastUS region
+                Utilities.Log("Creating resource group...");
+                var rgLro = await subscription.GetResourceGroups().CreateOrUpdateAsync(WaitUntil.Completed, rgName, new ResourceGroupData(AzureLocation.EastUS));
+                ResourceGroupResource resourceGroup = rgLro.Value;
+                _resourceGroupId = resourceGroup.Id;
+                Utilities.Log($"Created a resource group with name: {resourceGroup.Data.Name} ");
 
                 // ============================================================
                 // Purchase a domain (will be canceled for a full refund)
 
                 Utilities.Log("Purchasing a domain " + domainName + "...");
-                var domain = azure.AppServices.AppServiceDomains.Define(domainName)
-                        .WithExistingResourceGroup(rgName)
-                        .DefineRegistrantContact()
-                            .WithFirstName("Jon")
-                            .WithLastName("Doe")
-                            .WithEmail("jondoe@contoso.com")
-                            .WithAddressLine1("123 4th Ave")
-                            .WithCity("Redmond")
-                            .WithStateOrProvince("WA")
-                            .WithCountry(CountryISOCode.UnitedStates)
-                            .WithPostalCode("98052")
-                            .WithPhoneCountryCode(CountryPhoneCode.UnitedStates)
-                            .WithPhoneNumber("4258828080")
-                        .Attach()
-                        .WithDomainPrivacyEnabled(true)
-                        .WithAutoRenewEnabled(false)
-                        .Create();
-                Utilities.Log("Purchased domain " + domain.Name);
-                Utilities.Print(domain);
+                var domainData = new AppServiceDomainData(AzureLocation.global)
+                {
+                    ContactRegistrant =new RegistrationContactInfo(email,firstName,lastName,phoneNumber)
+                    {
+                        Organization = "+1",
+                        AddressMailing = new RegistrationAddressInfo(address1, city, country, postalCode, state) { }
+                    },
+                    IsDomainPrivacyEnabled = true,
+                    IsAutoRenew = false               
+                };
+                var domain = (await resourceGroup.GetAppServiceDomains().CreateOrUpdateAsync(WaitUntil.Completed,domainName,domainData)).Value;
+                Utilities.Log("Purchased domain " + domain.Data.Name);
+                Utilities.Log(domain);
 
                 //============================================================
                 // Create a self-singed SSL certificate
@@ -93,49 +107,81 @@ namespace ManageTrafficManager
                 //============================================================
                 // Creates app service in 5 different region
 
-                var appServicePlans = new List<IAppServicePlan>();
+                var appServicePlans = new List<AppServicePlanResource>();
                 int id = 0;
                 foreach (var region in regions)
                 {
                     var planName = appServicePlanNamePrefix + id;
                     Utilities.Log("Creating an app service plan " + planName + " in region " + region + "...");
-                    var appServicePlan = azure.AppServices.AppServicePlans
-                            .Define(planName)
-                            .WithRegion(region)
-                            .WithExistingResourceGroup(rgName)
-                            .WithPricingTier(PricingTier.BasicB1)
-                            .WithOperatingSystem(Microsoft.Azure.Management.AppService.Fluent.OperatingSystem.Windows)
-                            .Create();
+                    var appServicePlanData = new AppServicePlanData(region)
+                    {
+                        Sku = new AppServiceSkuDescription()
+                        {
+                            Name = "B1",
+                            Tier = "Basic",
+                            Size = "B1"
+                        }
+                    };                   
+                    var appServicePlan =(await resourceGroup.GetAppServicePlans().CreateOrUpdateAsync(WaitUntil.Completed,planName, appServicePlanData)).Value;
                     Utilities.Log("Created app service plan " + planName);
-                    Utilities.Print(appServicePlan);
+                    Utilities.Log(appServicePlan);
                     appServicePlans.Add(appServicePlan);
                     id++;
                 }
 
                 //============================================================
                 // Creates websites using previously created plan
-                var webApps = new List<IWebApp>();
+                var webApps = new List<WebSiteResource>();
                 id = 0;
                 foreach (var appServicePlan in appServicePlans)
                 {
                     var webAppName = webAppNamePrefix + id;
-                    Utilities.Log("Creating a web app " + webAppName + " using the plan " + appServicePlan.Name + "...");
-                    var webApp = azure.WebApps.Define(webAppName)
-                            .WithExistingWindowsPlan(appServicePlan)
-                            .WithExistingResourceGroup(rgName)
-                            .WithManagedHostnameBindings(domain, webAppName)
-                            .DefineSslBinding()
-                                .ForHostname(webAppName + "." + domain.Name)
-                                .WithPfxCertificateToUpload(Path.Combine(Utilities.ProjectPath, "Asset", pfxPath), certPassword)
-                                .WithSniBasedSsl()
-                                .Attach()
-                            .DefineSourceControl()
-                                .WithPublicGitRepository("https://github.com/jianghaolu/azure-site-test")
-                                .WithBranch("master")
-                                .Attach()
-                            .Create();
+                    var hostName = webAppName + "." + domain.Data.Name;
+                    Utilities.Log("Creating a web app " + webAppName + " using the plan " + appServicePlan.Data.Name + "...");
+                    var webSiteData = new WebSiteData(appServicePlan.Data.Location)
+                    {
+                        AppServicePlanId = appServicePlan.Data.Id,
+                        SiteConfig = new SiteConfigProperties()
+                        {
+                            WindowsFxVersion = "PricingTier.StandardS1",
+                            NetFrameworkVersion = "NetFrameworkVersion.V4_6"
+                        },
+                        HostNameSslStates =
+                        {
+                            new HostNameSslState()
+                            {
+                                Name =hostName ,
+                                SslState = HostNameBindingSslState.SniEnabled                               
+                            }
+                        }
+                    };
+                    var webApp = (await resourceGroup.GetWebSites().CreateOrUpdateAsync(WaitUntil.Completed, webAppName, webSiteData)).Value;
+                    var appCertificateData = new AppCertificateData(appServicePlan.Data.Location)
+                    {
+                        HostNames =
+                        {
+                            webApp.Data.Name + "." + domain.Data.Name
+                        },
+                        Password = certPassword,
+                        PfxBlob = System.Text.Encoding.Default.GetBytes(Path.Combine(".", "Asset", pfxPath))
+                    };
+                    var appCertificate = (await resourceGroup.GetAppCertificates().CreateOrUpdateAsync(WaitUntil.Completed, hostName, appCertificateData)).Value;
+                    var sslBindingData = new HostNameBindingData()
+                    {
+
+                    };
+                    var sslBinding = (await webApp.GetSiteHostNameBindings().CreateOrUpdateAsync(WaitUntil.Completed,hostName,sslBindingData)).Value;
+                    var sourceControlInput = new SiteSourceControlData()
+                    {
+                        RepoUri = new("https://github.com/jianghaolu/azure-site-test"),
+                        Branch = "master",
+                        IsGitHubAction = true,
+                        IsManualIntegration = true,
+                        IsMercurial = false
+                    };
+                    var sourceControl = (await webApp.GetWebSiteSourceControl().CreateOrUpdateAsync(WaitUntil.Completed,sourceControlInput)).Value;
                     Utilities.Log("Created web app " + webAppName);
-                    Utilities.Print(webApp);
+                    Utilities.Log(webApp);
                     webApps.Add(webApp);
                     id++;
                 }
@@ -143,117 +189,137 @@ namespace ManageTrafficManager
                 // Creates a traffic manager profile
 
                 Utilities.Log("Creating a traffic manager profile " + tmName + " for the web apps...");
-                IWithEndpoint tmDefinition = azure.TrafficManagerProfiles
-                        .Define(tmName)
-                        .WithExistingResourceGroup(rgName)
-                        .WithLeafDomainLabel(tmName)
-                        .WithPriorityBasedRouting();
-                ICreatable<ITrafficManagerProfile> tmCreatable = null;
+                var trafficManagerProfileData = new TrafficManagerProfileData()
+                {
+                    DnsConfig = new TrafficManagerDnsConfig()
+                    {
+                        RelativeName = tmName
+                    },
+                    TrafficRoutingMethod = TrafficRoutingMethod.Priority,
+                    ProfileStatus = TrafficManagerProfileStatus.Enabled
+                };
+                var trafficManagerProfile = (await resourceGroup.GetTrafficManagerProfiles().CreateOrUpdateAsync(WaitUntil.Completed, tmName, trafficManagerProfileData)).Value;
                 int priority = 1;
+                var endpointType = "AzureEndpoints";
+                IList<TrafficManagerEndpointData> tmCreatable =new List<TrafficManagerEndpointData>();
                 foreach (var webApp in webApps)
                 {
-                    tmCreatable = tmDefinition.DefineAzureTargetEndpoint("endpoint-" + priority)
-                            .ToResourceId(webApp.Id)
-                            .WithRoutingPriority(priority)
-                            .Attach();
+                    var tmDefinition = new TrafficManagerEndpointData()
+                    {
+                        Name = $"endpoint-{priority}",
+                        TargetResourceId = webApp.Data.Id,
+                        Priority = priority
+                    };
+                    tmCreatable.Add(tmDefinition);
                     priority++;
                 }
-
-                var trafficManagerProfile = tmCreatable.Create();
-                Utilities.Log("Created traffic manager " + trafficManagerProfile.Name);
-                Utilities.Print(trafficManagerProfile);
+                foreach(var item in tmCreatable)
+                {
+                    await trafficManagerProfile.GetTrafficManagerEndpoints().CreateOrUpdateAsync(WaitUntil.Completed,endpointType,item.Name,item);
+                }
+                
+                Utilities.Log("Created traffic manager " + trafficManagerProfile.Data.Name);
+                Utilities.Log(trafficManagerProfile);
 
                 //============================================================
                 // Disables one endpoint and removes another endpoint
 
                 Utilities.Log("Disabling and removing endpoint...");
-                trafficManagerProfile = trafficManagerProfile.Update()
-                        .UpdateAzureTargetEndpoint("endpoint-1")
-                            .WithTrafficDisabled()
-                            .Parent()
-                        .WithoutEndpoint("endpoint-2")
-                        .Apply();
+                var endpointDisable = (await trafficManagerProfile.GetTrafficManagerEndpointAsync(endpointType, "endpoint-1")).Value;
+                var disableData = new TrafficManagerEndpointData()
+                {
+                    EndpointStatus = TrafficManagerEndpointStatus.Disabled
+                };
+                endpointDisable = (await endpointDisable.UpdateAsync(disableData)).Value;
+                var endpointRemove = (await trafficManagerProfile.GetTrafficManagerEndpointAsync(endpointType, "endpoint-2")).Value.DeleteAsync(WaitUntil.Completed);
                 Utilities.Log("Endpoints updated");
 
                 //============================================================
                 // Enables an endpoint
 
                 Utilities.Log("Enabling endpoint...");
-                trafficManagerProfile = trafficManagerProfile.Update()
-                        .UpdateAzureTargetEndpoint("endpoint-1")
-                            .WithTrafficEnabled()
-                            .Parent()
-                        .Apply();
+                var endpointEnable = (await trafficManagerProfile.GetTrafficManagerEndpointAsync(endpointType, "endpoint-1")).Value;
+                var enableData = new TrafficManagerEndpointData()
+                {
+                    EndpointStatus = TrafficManagerEndpointStatus.Enabled
+                };
+                endpointEnable = (await endpointEnable.UpdateAsync(enableData)).Value;
                 Utilities.Log("Endpoint updated");
-                Utilities.Print(trafficManagerProfile);
+                Utilities.Log($"The current endpoint status is: {endpointEnable.Data.EndpointStatus}");
 
                 //============================================================
                 // Change/configure traffic manager routing method
 
                 Utilities.Log("Changing traffic manager profile routing method...");
-                trafficManagerProfile = trafficManagerProfile.Update()
-                        .WithPerformanceBasedRouting()
-                        .Apply();
+                var updateTrafficData = new TrafficManagerProfileData()
+                {
+                    TrafficRoutingMethod = TrafficRoutingMethod.Performance
+                };
+                trafficManagerProfile = (await trafficManagerProfile.UpdateAsync(updateTrafficData)).Value;
                 Utilities.Log("Changed traffic manager profile routing method");
 
                 //============================================================
                 // Disables the traffic manager profile
 
                 Utilities.Log("Disabling traffic manager profile...");
-                trafficManagerProfile.Update()
-                        .WithProfileStatusDisabled()
-                        .Apply();
+                var trafficDisableData = new TrafficManagerProfileData()
+                {
+                    ProfileStatus = TrafficManagerProfileStatus.Disabled
+                };
+                trafficManagerProfile = (await trafficManagerProfile.UpdateAsync(trafficDisableData)).Value;
                 Utilities.Log("Traffic manager profile disabled");
 
                 //============================================================
                 // Enables the traffic manager profile
 
                 Utilities.Log("Enabling traffic manager profile...");
-                trafficManagerProfile.Update()
-                        .WithProfileStatusDisabled()
-                        .Apply();
+                var trafficEnableData = new TrafficManagerProfileData()
+                {
+                    ProfileStatus = TrafficManagerProfileStatus.Enabled
+                };
+                trafficManagerProfile = (await trafficManagerProfile.UpdateAsync(trafficEnableData)).Value;
                 Utilities.Log("Traffic manager profile enabled");
 
                 //============================================================
                 // Deletes the traffic manager profile
 
                 Utilities.Log("Deleting the traffic manger profile...");
-                azure.TrafficManagerProfiles.DeleteById(trafficManagerProfile.Id);
+                await trafficManagerProfile.DeleteAsync(WaitUntil.Completed);
                 Utilities.Log("Traffic manager profile deleted");
             }
             finally
             {
                 try
                 {
-                    Utilities.Log("Deleting Resource Group: " + rgName);
-                    azure.ResourceGroups.BeginDeleteByName(rgName);
-                    Utilities.Log("Deleted Resource Group: " + rgName);
+                    if (_resourceGroupId is not null)
+                    {
+                        Utilities.Log($"Deleting Resource Group...");
+                        await client.GetResourceGroupResource(_resourceGroupId).DeleteAsync(WaitUntil.Completed);
+                        Utilities.Log($"Deleted Resource Group: {_resourceGroupId.Name}");
+                    }
                 }
-                catch
+                catch (Exception e)
                 {
-                    Utilities.Log("Did not create any resources in Azure. No clean up is necessary");
+                    Utilities.Log(e);
                 }
             }
         }
 
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             try
             {
                 //=================================================================
                 // Authenticate
-                var credentials = SdkContext.AzureCredentialsFactory.FromFile(Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION"));
 
-                var azure = Azure
-                    .Configure()
-                    .WithLogLevel(HttpLoggingDelegatingHandler.Level.Basic)
-                    .Authenticate(credentials)
-                    .WithDefaultSubscription();
+                var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
+                var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
+                var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
+                var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
+                ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                ArmClient client = new ArmClient(credential, subscription);
 
-                // Print selected subscription
-                Utilities.Log("Selected subscription: " + azure.SubscriptionId);
-
-                RunSample(azure);
+                await RunSample(client);
             }
             catch (Exception e)
             {
