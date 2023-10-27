@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Azure.ResourceManager.Network;
+using System.Text.RegularExpressions;
 
 namespace ManageTrafficManager
 {
@@ -50,21 +51,22 @@ namespace ManageTrafficManager
             var email = "jondoe@contoso.com";
             var firstName = "Jon";
             var lastName = "Doe";
-            var phoneNumber = "4258828080";
+            var phoneNumber = "+1.12455342242";
             var country = "US";
             var city = "Redmond";
             var address1 = "123 4th Ave";
             var postalCode = "98052";
             var state = "WA";
+            var projectPath = Regex.Match(System.IO.Directory.GetCurrentDirectory(), @".*(?=bin\\Debug)").Value;
 
 
             // The regions in which web app needs to be created
             //
-            regions.Add(AzureLocation.WestUS2);
+            regions.Add(AzureLocation.WestUS);
             regions.Add(AzureLocation.EastUS2);
             regions.Add(AzureLocation.EastAsia);
-            regions.Add(AzureLocation.WestIndia);
-            regions.Add(AzureLocation.CentralUS);
+            regions.Add(AzureLocation.JapanEast);
+            regions.Add(AzureLocation.NorthCentralUS);
             
             try
             {
@@ -80,17 +82,44 @@ namespace ManageTrafficManager
 
                 // ============================================================
                 // Purchase a domain (will be canceled for a full refund)
-
                 Utilities.Log("Purchasing a domain " + domainName + "...");
-                var domainData = new AppServiceDomainData(AzureLocation.global)
+                var domainData = new AppServiceDomainData("global")
                 {
-                    ContactRegistrant =new RegistrationContactInfo(email,firstName,lastName,phoneNumber)
+                    ContactRegistrant = new RegistrationContactInfo(email, firstName, lastName, phoneNumber)
                     {
-                        Organization = "+1",
+                        JobTitle = "Registrant",
+                        Organization = "Microsoft Inc.",
+                        AddressMailing = new RegistrationAddressInfo(address1, city, country, postalCode, state) { }
+                    },
+                    ContactAdmin = new RegistrationContactInfo(email,firstName,lastName,phoneNumber)
+                    {
+                        JobTitle = "Admin",
+                        Organization = "Microsoft Inc.",
+                        AddressMailing = new RegistrationAddressInfo(address1, city, country, postalCode, state) { }
+                    },
+                    ContactBilling = new RegistrationContactInfo(email,firstName,lastName,phoneNumber)
+                    {
+                        JobTitle = "Billing",
+                        Organization = "Microsoft Inc.",
+                        AddressMailing = new RegistrationAddressInfo(address1, city, country, postalCode, state) { }
+                    },
+                    ContactTech = new RegistrationContactInfo(email,firstName,lastName,phoneNumber)
+                    {
+                        JobTitle = "Tech",
+                        Organization = "Microsoft Inc.",
                         AddressMailing = new RegistrationAddressInfo(address1, city, country, postalCode, state) { }
                     },
                     IsDomainPrivacyEnabled = true,
-                    IsAutoRenew = false               
+                    IsAutoRenew = false,
+                    Consent = new DomainPurchaseConsent()
+                    {
+                        AgreedBy = "100.64.152.221",
+                        AgreementKeys =
+                        {
+                            "agreementKey1"
+                        },
+                        AgreedOn =DateTime.Now
+                    }
                 };
                 var domain = (await resourceGroup.GetAppServiceDomains().CreateOrUpdateAsync(WaitUntil.Completed,domainName,domainData)).Value;
                 Utilities.Log("Purchased domain " + domain.Data.Name);
@@ -144,33 +173,32 @@ namespace ManageTrafficManager
                         SiteConfig = new SiteConfigProperties()
                         {
                             WindowsFxVersion = "PricingTier.StandardS1",
-                            NetFrameworkVersion = "NetFrameworkVersion.V4_6"
-                        },
-                        HostNameSslStates =
-                        {
-                            new HostNameSslState()
-                            {
-                                Name =hostName ,
-                                SslState = HostNameBindingSslState.SniEnabled                               
-                            }
+                            NetFrameworkVersion = "v4.6",
                         }
                     };
                     var webApp = (await resourceGroup.GetWebSites().CreateOrUpdateAsync(WaitUntil.Completed, webAppName, webSiteData)).Value;
+
+                    var sslBindingData = new HostNameBindingData()
+                    {
+                        HostNameType = AppServiceHostNameType.Managed,
+                        SiteName = webApp.Data.Name,
+                        DomainId = domain.Data.Id,
+                        SslState = HostNameBindingSslState.SniEnabled,
+                        AzureResourceType = AppServiceResourceType.Website                      
+                    };
+                    var sslBinding = (await webApp.GetSiteHostNameBindings().CreateOrUpdateAsync(WaitUntil.Completed, hostName, sslBindingData)).Value;
+
                     var appCertificateData = new AppCertificateData(appServicePlan.Data.Location)
                     {
                         HostNames =
                         {
-                            webApp.Data.Name + "." + domain.Data.Name
+                            hostName
                         },
                         Password = certPassword,
-                        PfxBlob = System.Text.Encoding.Default.GetBytes(Path.Combine(".", "Asset", pfxPath))
+                        //PfxBlob = System.Text.Encoding.Default.GetBytes(Path.Combine(projectPath, pfxPath))
                     };
                     var appCertificate = (await resourceGroup.GetAppCertificates().CreateOrUpdateAsync(WaitUntil.Completed, hostName, appCertificateData)).Value;
-                    var sslBindingData = new HostNameBindingData()
-                    {
 
-                    };
-                    var sslBinding = (await webApp.GetSiteHostNameBindings().CreateOrUpdateAsync(WaitUntil.Completed,hostName,sslBindingData)).Value;
                     var sourceControlInput = new SiteSourceControlData()
                     {
                         RepoUri = new("https://github.com/jianghaolu/azure-site-test"),
@@ -315,8 +343,9 @@ namespace ManageTrafficManager
                 var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
                 var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
                 var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
-                var subscription = Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
-                ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                var subscription = Environment.GetEnvironmentVariable/*("faa080af-c1d8-40ad-9cce-e1a450ca5b57");//*/("SUBSCRIPTION_ID");
+                //ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+                var credential = new InteractiveBrowserCredential();
                 ArmClient client = new ArmClient(credential, subscription);
 
                 await RunSample(client);

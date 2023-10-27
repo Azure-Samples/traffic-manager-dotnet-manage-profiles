@@ -13,6 +13,7 @@ using System.Text;
 using Azure.Core;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace Azure.ResourceManager.Samples.Common
 {
@@ -29,7 +30,7 @@ namespace Azure.ResourceManager.Samples.Common
         {
             LoggerMethod = Console.WriteLine;
             PauseMethod = Console.ReadLine;
-            ProjectPath = ".";
+            ProjectPath = Regex.Match(System.IO.Directory.GetCurrentDirectory(), @".*(?=bin\\Debug)").Value;
         }
 
         public static void Log(string message)
@@ -71,8 +72,9 @@ namespace Azure.ResourceManager.Samples.Common
                     pfxPath,
                     password,
                     domainName);
+                Log(args);
                 ProcessStartInfo info = new ProcessStartInfo("powershell", args);
-                string assetPath = Path.Combine(ProjectPath, "Asset");
+                string assetPath = Path.Combine(ProjectPath);
                 info.WorkingDirectory = assetPath;
                 Process process = Process.Start(info);
                 process.WaitForExit();
