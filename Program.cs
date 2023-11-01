@@ -18,6 +18,7 @@ using System.Diagnostics;
 using System.IO;
 using Azure.ResourceManager.Network;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography.X509Certificates;
 
 namespace ManageTrafficManager
 {
@@ -123,7 +124,7 @@ namespace ManageTrafficManager
                 };
                 var domain = (await resourceGroup.GetAppServiceDomains().CreateOrUpdateAsync(WaitUntil.Completed,domainName,domainData)).Value;
                 Utilities.Log("Purchased domain " + domain.Data.Name);
-                Utilities.Log(domain);
+                Utilities.PrintDomain(domain);
 
                 //============================================================
                 // Create a self-singed SSL certificate
@@ -153,7 +154,7 @@ namespace ManageTrafficManager
                     };                   
                     var appServicePlan =(await resourceGroup.GetAppServicePlans().CreateOrUpdateAsync(WaitUntil.Completed,planName, appServicePlanData)).Value;
                     Utilities.Log("Created app service plan " + planName);
-                    Utilities.Log(appServicePlan);
+                    Utilities.PrintAppServicePlan(appServicePlan);
                     appServicePlans.Add(appServicePlan);
                     id++;
                 }
@@ -184,10 +185,12 @@ namespace ManageTrafficManager
                         SiteName = webApp.Data.Name,
                         DomainId = domain.Data.Id,
                         SslState = HostNameBindingSslState.SniEnabled,
-                        AzureResourceType = AppServiceResourceType.Website                      
+                        CustomHostNameDnsRecordType = CustomHostNameDnsRecordType.CName
                     };
                     var sslBinding = (await webApp.GetSiteHostNameBindings().CreateOrUpdateAsync(WaitUntil.Completed, hostName, sslBindingData)).Value;
 
+                    var cert = new X509Certificate(projectPath + "\\" + pfxPath, certPassword).GetRawCertData();
+                    Utilities.Log(cert.ToString());
                     var appCertificateData = new AppCertificateData(appServicePlan.Data.Location)
                     {
                         HostNames =
@@ -195,7 +198,8 @@ namespace ManageTrafficManager
                             hostName
                         },
                         Password = certPassword,
-                        //PfxBlob = System.Text.Encoding.Default.GetBytes(Path.Combine(projectPath, pfxPath))
+
+                        PfxBlob = cert
                     };
                     var appCertificate = (await resourceGroup.GetAppCertificates().CreateOrUpdateAsync(WaitUntil.Completed, hostName, appCertificateData)).Value;
 
@@ -203,13 +207,12 @@ namespace ManageTrafficManager
                     {
                         RepoUri = new("https://github.com/jianghaolu/azure-site-test"),
                         Branch = "master",
-                        IsGitHubAction = true,
                         IsManualIntegration = true,
                         IsMercurial = false
                     };
                     var sourceControl = (await webApp.GetWebSiteSourceControl().CreateOrUpdateAsync(WaitUntil.Completed,sourceControlInput)).Value;
                     Utilities.Log("Created web app " + webAppName);
-                    Utilities.Log(webApp);
+                    Utilities.PrintWeb(webApp);
                     webApps.Add(webApp);
                     id++;
                 }
@@ -219,6 +222,16 @@ namespace ManageTrafficManager
                 Utilities.Log("Creating a traffic manager profile " + tmName + " for the web apps...");
                 var trafficManagerProfileData = new TrafficManagerProfileData()
                 {
+                    Location = "global",
+                    MonitorConfig = new TrafficManagerMonitorConfig()
+                    {
+                        Protocol = TrafficManagerMonitorProtocol.Http,
+                        Port = 80,
+                        Path = "/testpath.aspx",
+                        IntervalInSeconds = 10,
+                        TimeoutInSeconds = 5,
+                        ToleratedNumberOfFailures = 2
+                    },
                     DnsConfig = new TrafficManagerDnsConfig()
                     {
                         RelativeName = tmName
@@ -247,7 +260,7 @@ namespace ManageTrafficManager
                 }
                 
                 Utilities.Log("Created traffic manager " + trafficManagerProfile.Data.Name);
-                Utilities.Log(trafficManagerProfile);
+                Utilities.PrintTrafficManagerProfile(trafficManagerProfile);
 
                 //============================================================
                 // Disables one endpoint and removes another endpoint
@@ -343,9 +356,9 @@ namespace ManageTrafficManager
                 var clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
                 var clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
                 var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
-                var subscription = Environment.GetEnvironmentVariable/*("faa080af-c1d8-40ad-9cce-e1a450ca5b57");//*/("SUBSCRIPTION_ID");
+                var subscription = "faa080af-c1d8-40ad-9cce-e1a450ca5b57";//Environment.GetEnvironmentVariable("SUBSCRIPTION_ID");
                 //ClientSecretCredential credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
-                var credential = new InteractiveBrowserCredential();
+                var credential = new InteractiveBrowserCredential();//not authorization create domain
                 ArmClient client = new ArmClient(credential, subscription);
 
                 await RunSample(client);

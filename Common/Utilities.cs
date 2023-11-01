@@ -14,6 +14,10 @@ using Azure.Core;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Azure.ResourceManager.AppService;
+using Azure.ResourceManager.TrafficManager;
+using System.Numerics;
+using Microsoft.Extensions.Azure;
 
 namespace Azure.ResourceManager.Samples.Common
 {
@@ -62,6 +66,52 @@ namespace Azure.ResourceManager.Samples.Common
         public static string CreatePassword() => "azure12345QWE!";
 
         public static string CreateUsername() => "tirekicker";
+
+        public static void PrintWeb(WebSiteResource web)
+        {
+            var info = new StringBuilder();
+            info.Append("WebApp: ").Append(web.Data.Id)
+                .Append("\n\tName: ").Append(web.Data.Name)
+                .Append("\n\tResource group: ").Append(web.Id.ResourceGroupName)
+                .Append("\n\tRegion: ").Append(web.Data.Location)
+                .Append("\n\tAppServicePlanId: ").Append(web.Data.AppServicePlanId);
+            Log(info.ToString());
+        }
+
+        public static void PrintTrafficManagerProfile(TrafficManagerProfileResource tm)
+        {
+            var info = new StringBuilder();
+            info.Append("traffic manager: ").Append(tm.Data.Id)
+                .Append("\n\tName: ").Append(tm.Data.Name)
+                .Append("\n\tResource group: ").Append(tm.Id.ResourceGroupName)
+                .Append("\n\tRegion: ").Append(tm.Data.Location)
+                .Append("\n\tTrafficRoutingMethod: ").Append(tm.Data.TrafficRoutingMethod)
+                .Append("\n\tProfileStatus: ").Append(tm.Data.ProfileStatus);
+            Log(info.ToString());
+        }
+
+        public static void PrintAppServicePlan(AppServicePlanResource plan)
+        {
+            var info = new StringBuilder();
+            info.Append("app service plan: ").Append(plan.Data.Id)
+                .Append("\n\tName: ").Append(plan.Data.Name)
+                .Append("\n\tResource group: ").Append(plan.Id.ResourceGroupName)
+                .Append("\n\tRegion: ").Append(plan.Data.Location)
+                .Append("\n\tSku: ").Append(plan.Data.Sku.Name)
+                .Append("\n\tTier: ").Append(plan.Data.Sku.Tier)
+                .Append("\n\tSize: ").Append(plan.Data.Sku.Size);
+            Log(info.ToString());
+        }
+
+        public static void PrintDomain(AppServiceDomainResource domain)
+        {
+            var info = new StringBuilder();
+            info.Append("app service plan: ").Append(domain.Data.Id)
+                .Append("\n\tName: ").Append(domain.Data.Name)
+                .Append("\n\tResource group: ").Append(domain.Id.ResourceGroupName)
+                .Append("\n\tRegion: ").Append(domain.Data.Location);
+            Log(info.ToString());
+        }
 
         public static void CreateCertificate(string domainName, string pfxPath, string password)
         {
